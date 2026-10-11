@@ -6,12 +6,13 @@ const TALLAS = ['S', 'M', 'L', 'XL'];
 const ESTADOS = ['anotado', 'confirmado', 'impreso', 'entregado', 'cancelado'];
 
 export default function Admin() {
-  const [ok, setOk] = useState(false);
+  const [ok, setOk] = useState(null); // null = verificando, false = login, true = dentro
   const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
   const [productos, setProductos] = useState([]);
   const [variantes, setVariantes] = useState([]);
   const [pedidos, setPedidos] = useState([]);
-  const [form, setForm] = useState({ nombre: '', sku: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '' });
+  const [form, setForm] = useState({ nombre: '', ubicacion: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '' });
   const [fotoFile, setFotoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -19,10 +20,15 @@ export default function Admin() {
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
-    if (process.env.NEXT_PUBLIC_ADMIN_KEY && sessionStorage.getItem('admin') === '1') setOk(true);
-    else if (!process.env.NEXT_PUBLIC_ADMIN_KEY) setOk(true); // sin clave en local, entrar directo
-    load();
+    fetch('/api/admin/session')
+      .then((r) => r.json())
+      .then((d) => setOk(d.ok === true))
+      .catch(() => setOk(false));
   }, []);
+
+  useEffect(() => {
+    if (ok === true) load();
+  }, [ok]);
 
   async function load() {
     if (!isSupabaseConfigured) {
@@ -48,12 +54,34 @@ export default function Admin() {
     localStorage.setItem('mock-db', JSON.stringify({ productos: np, variantes: nv, pedidos: npe }));
   }
 
-  function login(e) {
+  async function login(e) {
     e.preventDefault();
-    if (!process.env.NEXT_PUBLIC_ADMIN_KEY || key === process.env.NEXT_PUBLIC_ADMIN_KEY) {
-      setOk(true);
-      sessionStorage.setItem('admin', '1');
-    } else setMsg('Clave incorrecta');
+    setBusy(true);
+    setMsg('');
+    try {
+      const r = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) {
+        setKey('');
+        setOk(true);
+      } else {
+        setMsg(d.error || 'Clave incorrecta');
+      }
+    } catch {
+      setMsg('No se pudo conectar con el servidor');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch('/api/admin/logout', { method: 'POST' }).catch(() => {});
+    setOk(false);
+    setKey('');
   }
 
   async function subirArchivo(file) {
@@ -68,6 +96,14 @@ export default function Admin() {
 
   async function agregarFoto(productoId, file) {
     if (!file) return;
+    if (!isSupabaseConfigured) {
+      // Modo maqueta: vista previa solo en esta sesión (no se guarda la imagen)
+      const url = URL.createObjectURL(file);
+      const np = productos.map((p) => (p.id === productoId ? { ...p, fotos: [...(p.fotos || []), url] } : p));
+      setProductos(np);
+      setMsg('Foto agregada en esta sesión (modo maqueta: no se guarda)');
+      return;
+    }
     try {
       setUploading(true);
       const url = await subirArchivo(file);
@@ -87,6 +123,13 @@ export default function Admin() {
   async function quitarFoto(productoId, url) {
     const prod = productos.find((p) => p.id === productoId);
     const fotos = (prod?.fotos || []).filter((f) => f !== url);
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+    if (!isSupabaseConfigured) {
+      const np = productos.map((p) => (p.id === productoId ? { ...p, fotos } : p));
+      setProductos(np); saveMock(np, variantes, pedidos);
+      setMsg('Foto quitada (modo maqueta)');
+      return;
+    }
     const sb = getSupabase();
     await sb.from('productos').update({ fotos }).eq('id', productoId);
     load();
@@ -107,7 +150,7 @@ export default function Admin() {
         setUploading(false);
       }
     }
-    const payload = { nombre: form.nombre, sku: form.sku, precio: Number(form.precio), tela: form.tela, corte: form.corte, color_base: form.color_base, descripcion: form.descripcion, fotos, activo: true };
+    const payload = { nombre: form.nombre, ubicacion: form.ubicacion, precio: Number(form.precio), tela: form.tela, corte: form.corte, color_base: form.color_base, descripcion: form.descripcion, fotos, activo: true };
     if (!isSupabaseConfigured) {
       const np = [{ ...payload, id: 'mock-' + Date.now() }, ...productos];
       // crear variantes con stock 0
@@ -126,17 +169,17 @@ export default function Admin() {
         load();
       }
     }
-    setForm({ nombre: '', sku: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '' });
+    setForm({ nombre: '', ubicacion: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '' });
     setFotoFile(null);
   }
 
   function startEdit(p) {
     setEditingId(p.id);
-    setEditForm({ nombre: p.nombre || '', precio: p.precio || '', tela: p.tela || '', corte: p.corte || '', descripcion: p.descripcion || '' });
+    setEditForm({ nombre: p.nombre || '', ubicacion: p.ubicacion || p.sku || '', precio: p.precio || '', tela: p.tela || '', corte: p.corte || '', descripcion: p.descripcion || '' });
   }
 
   async function saveEdit(id) {
-    const payload = { nombre: editForm.nombre, precio: Number(editForm.precio), tela: editForm.tela, corte: editForm.corte, descripcion: editForm.descripcion };
+    const payload = { nombre: editForm.nombre, ubicacion: editForm.ubicacion, precio: Number(editForm.precio), tela: editForm.tela, corte: editForm.corte, descripcion: editForm.descripcion };
     if (!isSupabaseConfigured) {
       const np = productos.map((p) => (p.id === id ? { ...p, ...payload } : p));
       setProductos(np); saveMock(np, variantes, pedidos);
@@ -186,16 +229,45 @@ export default function Admin() {
     }
   }
 
+  if (ok === null) {
+    return (
+      <div className="admin-wrap login-wrap">
+        <div className="login-card">
+          <p className="kicker">Taller — acceso privado</p>
+          <p className="login-sub">Verificando acceso…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!ok) {
     return (
-      <div className="admin-wrap">
-        <p className="kicker">Admin</p>
-        <h2>Entrar al taller</h2>
-        <form onSubmit={login} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <input className="input" type="password" placeholder="Clave admin" value={key} onChange={(e) => setKey(e.target.value)} />
-          <button className="btn-ink primary" type="submit">Entrar</button>
-        </form>
-        {msg && <p className="mode-note">{msg}</p>}
+      <div className="admin-wrap login-wrap">
+        <div className="login-card">
+          <span className="tape t1" />
+          <span className="tape t2" />
+          <p className="kicker">Taller — acceso privado</p>
+          <h2>Entrar al taller</h2>
+          <p className="login-sub">Zona privada. Ingresa tu clave de taller para gestionar productos, stock y pedidos.</p>
+          <form onSubmit={login} className="login-form">
+            <label className="label" htmlFor="admin-key">Clave de taller</label>
+            <input
+              id="admin-key"
+              className="input"
+              type="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              autoFocus
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+            />
+            <button className="btn-ink primary" type="submit" disabled={busy || !key}>
+              {busy ? 'Verificando…' : 'Entrar'}
+            </button>
+          </form>
+          {msg && <p className="login-error">{msg}</p>}
+          <a className="login-back" href="/">← volver a la tienda</a>
+        </div>
       </div>
     );
   }
@@ -208,7 +280,10 @@ export default function Admin() {
       {msg && <p className="mode-note">{msg}</p>}
       <div className="admin-bar">
         <a className="btn-ink small" href="/">← ver tienda</a>
-        <button className="btn-ink small" onClick={load}>Recargar</button>
+        <span>
+          <button className="btn-ink small" onClick={load}>Recargar</button>{' '}
+          <button className="btn-ink small" onClick={logout}>Salir</button>
+        </span>
       </div>
 
       <div className="admin-grid">
@@ -216,7 +291,7 @@ export default function Admin() {
           <h3>Nuevo producto</h3>
           <form onSubmit={crearProducto} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <input className="input" placeholder="Nombre (Wave Club — negra)" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
-            <input className="input" placeholder="SKU 002" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+            <input className="input" placeholder="Ubicación: ej. D:/fotos/wave o estante 2" value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} />
             <input className="input" placeholder="Precio 59.90" type="number" step="0.01" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} required />
             <input className="input" placeholder="Tela" value={form.tela} onChange={(e) => setForm({ ...form, tela: e.target.value })} />
             <input className="input" placeholder="Corte" value={form.corte} onChange={(e) => setForm({ ...form, corte: e.target.value })} />
@@ -229,38 +304,54 @@ export default function Admin() {
 
         <div className="admin-card">
           <h3>Productos ({productos.length})</h3>
-          <table className="table"><thead><tr><th>Foto</th><th>Nombre</th><th>Precio</th><th></th></tr></thead>
-            <tbody>{productos.map((p) => (
+          <div className="prod-list">
+            {productos.length === 0 && <p className="small-note">Sin productos todavía. Crea el primero a la izquierda.</p>}
+            {productos.map((p) => (
               editingId === p.id ? (
-              <tr key={p.id}>
-                <td><span className="badge">{p.sku}</span></td>
-                <td colSpan="2">
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <input className="input" value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} placeholder="Nombre" />
-                    <input className="input" type="number" step="0.01" value={editForm.precio} onChange={(e) => setEditForm({ ...editForm, precio: e.target.value })} placeholder="Precio" />
-                    <input className="input" value={editForm.tela} onChange={(e) => setEditForm({ ...editForm, tela: e.target.value })} placeholder="Tela" />
-                    <input className="input" value={editForm.corte} onChange={(e) => setEditForm({ ...editForm, corte: e.target.value })} placeholder="Corte" />
-                    <textarea className="input" rows="2" value={editForm.descripcion} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} placeholder="Descripción" />
+                <div className="prod-edit" key={p.id}>
+                  <p className="label">Editando — {p.nombre}</p>
+                  <div className="edit-grid">
+                    <label>Nombre<input className="input" value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} /></label>
+                    <label>Precio<input className="input" type="number" step="0.01" value={editForm.precio} onChange={(e) => setEditForm({ ...editForm, precio: e.target.value })} /></label>
+                    <label>Ubicación<input className="input" value={editForm.ubicacion} onChange={(e) => setEditForm({ ...editForm, ubicacion: e.target.value })} placeholder="D:/fotos/... o estante 2" /></label>
+                    <label>Tela<input className="input" value={editForm.tela} onChange={(e) => setEditForm({ ...editForm, tela: e.target.value })} /></label>
+                    <label>Corte<input className="input" value={editForm.corte} onChange={(e) => setEditForm({ ...editForm, corte: e.target.value })} /></label>
+                    <label className="span-2">Descripción<textarea className="input" rows="2" value={editForm.descripcion} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} /></label>
                   </div>
-                </td>
-                <td><div className="admin-row"><button className="btn-ink primary small" onClick={() => saveEdit(p.id)}>guardar</button><button className="btn-ink small" onClick={() => setEditingId(null)}>x</button></div></td></tr>
-              ) : (
-              <tr key={p.id}>
-                <td>
-                  {(p.fotos || []).length > 0
-                    ? <img src={p.fotos[0]} alt={p.nombre} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 4, border: '1.5px solid #1c1a16' }} />
-                    : <span className="badge">sin foto</span>}
-                  <div style={{ marginTop: 4 }}>
-                    <label className="btn-ink small" style={{ cursor: 'pointer' }}>{uploading ? '...' : '+ foto'}
+                  <p className="label">Fotos ({(p.fotos || []).length})</p>
+                  <div className="photo-row">
+                    {(p.fotos || []).map((f) => (
+                      <span className="photo-thumb" key={f}>
+                        <img src={f} alt="" />
+                        <button className="photo-x" title="Quitar foto" onClick={() => quitarFoto(p.id, f)}>×</button>
+                      </span>
+                    ))}
+                    <label className="btn-ink small photo-add">{uploading ? '…' : '+ agregar'}
                       <input type="file" accept="image/*" hidden onChange={(e) => agregarFoto(p.id, e.target.files?.[0])} />
                     </label>
-                    {(p.fotos || []).length > 0 && <button className="btn-ink small" style={{ marginLeft: 4 }} onClick={() => quitarFoto(p.id, p.fotos[0])}>x</button>}
                   </div>
-                </td>
-                <td>{p.nombre}<br /><span className="badge">{p.sku}</span></td><td>$ {p.precio}</td>
-                <td><div className="admin-row"><button className="btn-ink small" onClick={() => startEdit(p)}>editar</button><button className="btn-ink small" onClick={() => borrarProducto(p.id)}>borrar</button></div></td></tr>
+                  <div className="admin-row">
+                    <button className="btn-ink primary small" onClick={() => saveEdit(p.id)}>guardar cambios</button>
+                    <button className="btn-ink small" onClick={() => setEditingId(null)}>cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="prod-item" key={p.id}>
+                  {(p.fotos || []).length > 0
+                    ? <img src={p.fotos[0]} alt={p.nombre} className="prod-thumb" />
+                    : <span className="badge">sin foto</span>}
+                  <div className="prod-meta">
+                    <strong>{p.nombre}</strong>
+                    <span className="prod-sub">$ {p.precio}{(p.ubicacion || p.sku) ? ` · ${p.ubicacion || p.sku}` : ''}</span>
+                  </div>
+                  <div className="admin-row">
+                    <button className="btn-ink small" onClick={() => startEdit(p)}>editar</button>
+                    <button className="btn-ink small" onClick={() => borrarProducto(p.id)}>borrar</button>
+                  </div>
+                </div>
               )
-            ))}</tbody></table>
+            ))}
+          </div>
         </div>
       </div>
 

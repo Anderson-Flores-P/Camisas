@@ -5,6 +5,7 @@ create table if not exists productos (
   id uuid primary key default gen_random_uuid(),
   nombre text not null,
   sku text,
+  ubicacion text default '',
   precio numeric(10,2) not null default 59.90,
   tela text default 'Algodón 220g',
   corte text default 'Recto',
