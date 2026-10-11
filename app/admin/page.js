@@ -54,6 +54,17 @@ export default function Admin() {
     localStorage.setItem('mock-db', JSON.stringify({ productos: np, variantes: nv, pedidos: npe }));
   }
 
+  // Si Supabase no tiene una columna (ej. descripcion), el error técnico
+  // no le dice nada al usuario: lo traducimos a la acción a tomar.
+  function dbErrorMsg(error) {
+    const m = String(error?.message || error || '');
+    if (/schema cache|column/i.test(m)) {
+      const col = (m.match(/'(\w+)' column/) || [])[1] || 'una columna';
+      return `Falta la columna '${col}' en Supabase: pega supabase/migracion.sql en el SQL Editor, dale Run y luego Recargar.`;
+    }
+    return m;
+  }
+
   async function login(e) {
     e.preventDefault();
     setBusy(true);
@@ -161,7 +172,7 @@ export default function Admin() {
     } else {
       const sb = getSupabase();
       const { data, error } = await sb.from('productos').insert(payload).select().single();
-      if (error) setMsg(error.message);
+      if (error) setMsg(dbErrorMsg(error));
       else {
         // crear variantes base
         await sb.from('variantes').insert(TALLAS.map((t) => ({ producto_id: data.id, talla: t, color: 'Único', stock: 0 })));
@@ -187,7 +198,7 @@ export default function Admin() {
     } else {
       const sb = getSupabase();
       const { error } = await sb.from('productos').update(payload).eq('id', id);
-      setMsg(error ? error.message : 'Cambios guardados');
+      setMsg(error ? dbErrorMsg(error) : 'Cambios guardados');
       load();
     }
     setEditingId(null);
@@ -357,11 +368,27 @@ export default function Admin() {
 
       <div className="admin-card" style={{ marginTop: 16 }}>
         <h3>Stock por talla</h3>
-        <table className="table"><thead><tr><th>Producto</th><th>Talla</th><th>Stock</th><th></th></tr></thead>
-          <tbody>{variantes.map((v) => (
-            <tr key={v.id}><td>{productos.find((p) => p.id === v.producto_id)?.nombre || v.producto_id}</td><td>{v.talla}</td><td>{v.stock}</td>
-              <td><div className="admin-row"><button className="btn-ink small" onClick={() => cambiarStock(v.id, -1)}>-</button><button className="btn-ink small" onClick={() => cambiarStock(v.id, 1)}>+</button></div></td></tr>
-          ))}</tbody></table>
+        <div className="stock-list">
+          {productos.length === 0 && <p className="small-note">Sin productos todavía.</p>}
+          {productos.map((p) => (
+            <div className="stock-row" key={p.id}>
+              <span className="stock-name" title={p.nombre}>{p.nombre}</span>
+              <div className="stock-tallas">
+                {TALLAS.map((t) => {
+                  const v = variantes.find((x) => x.producto_id === p.id && x.talla === t);
+                  if (!v) return <span className="stock-talla" key={t}><b>{t} · —</b></span>;
+                  return (
+                    <span className="stock-talla" key={v.id}>
+                      <b>{t} · {v.stock}</b>
+                      <button className="btn-ink slim" onClick={() => cambiarStock(v.id, -1)}>−</button>
+                      <button className="btn-ink slim" onClick={() => cambiarStock(v.id, 1)}>+</button>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="admin-card" style={{ marginTop: 16 }}>
