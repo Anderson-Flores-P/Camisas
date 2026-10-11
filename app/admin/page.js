@@ -395,7 +395,12 @@ export default function Admin() {
         <h3>Pedidos ({pedidos.length})</h3>
         <table className="table"><thead><tr><th>Cliente</th><th>Items</th><th>Total</th><th>Estado</th></tr></thead>
           <tbody>{pedidos.map((pe) => (
-            <tr key={pe.id}><td>{pe.nombre_cliente}<br />{pe.whatsapp}</td><td><pre style={{ whiteSpace: 'pre-wrap', fontSize: '.75rem' }}>{JSON.stringify(pe.items, null, 1)}</pre></td><td>$ {pe.total}</td>
+            <tr key={pe.id}>
+              <td>{pe.nombre_cliente}<br />{pe.whatsapp ? <a href={`https://wa.me/${String(pe.whatsapp).replace(/\D/g, '')}`} target="_blank" rel="noreferrer">{pe.whatsapp}</a> : '—'}<br /><span className="badge">{pe.created_at ? new Date(pe.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</span></td>
+              <td>{(pe.items || []).map((it, i) => (
+                <span className="order-item" key={i}>{it.cantidad > 1 ? `${it.cantidad}× ` : ''}{it.nombre || 'Camisa'}{it.talla ? ` · talla ${it.talla}` : ''}{it.color ? ` · ${it.color}` : ''}</span>
+              ))}</td>
+              <td>$ {pe.total}</td>
               <td><select className="select" value={pe.estado} onChange={(e) => cambiarEstado(pe.id, e.target.value)}>{ESTADOS.map((s) => <option key={s} value={s}>{s}</option>)}</select></td></tr>
           ))}</tbody></table>
       </div>

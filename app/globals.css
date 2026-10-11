@@ -291,6 +291,9 @@ footer{ max-width:1060px; margin:26px auto 0; padding:20px; border-top:2px solid
 .stock-talla b{ min-width:52px; text-align:center; }
 .btn-ink.slim{ padding:5px 11px; font-size:.78rem; }
 
+/* ADMIN — items de pedido legibles (en vez de JSON crudo) */
+.order-item{ display:block; font-size:.9rem; padding:2px 0; }
+
 /* FOTOS REALES — se ven completas, sin recorte */
 .prod-img{ width:100%; height:320px; object-fit:contain; background:var(--paper); display:block; }
 .mini-shirt{ overflow:hidden; }
