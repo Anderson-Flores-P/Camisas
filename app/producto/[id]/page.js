@@ -5,6 +5,7 @@ import { getSupabase, isSupabaseConfigured } from '../../../lib/supabase';
 import { mockProductos, mockVariantes } from '../../../lib/mock';
 
 export default function ProductoDetalle() {
+  const WHATSAPP_TIENDA = '50379588735';
   const { id } = useParams();
   const [prod, setProd] = useState(null);
   const [vars, setVars] = useState([]);
@@ -125,7 +126,7 @@ export default function ProductoDetalle() {
           </form>
           {msg && <p className="mode-note" style={{ background: '#f7f2e6', color: '#1c1a16', border: '1.5px solid #1c1a16' }}>{msg}</p>}
           <p style={{ marginTop: 10 }}>
-            <a className="btn-ink" target="_blank" rel="noreferrer" href={`https://wa.me/51999999999?text=${encodeURIComponent(`Hola, quiero ${prod.nombre} talla ${talla}`)}`}>
+              <a className="btn-ink" target="_blank" rel="noreferrer" href={`https://wa.me/${WHATSAPP_TIENDA}?text=${encodeURIComponent(`Hola, quiero ${prod.nombre} talla ${talla}`)}`}>
               Preguntar por WhatsApp
             </a>
           </p>

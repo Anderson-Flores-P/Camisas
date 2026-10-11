@@ -10,6 +10,7 @@ const COLORES = [
   { hex: '#3a5a40', name: 'Verde' },
 ];
 const TALLAS = ['S', 'M', 'L', 'XL'];
+const WHATSAPP_TIENDA = '50379588735';
 
 export default function Home() {
   // Si hay Supabase, arrancamos vacío + loading para no mostrar
@@ -211,7 +212,7 @@ export default function Home() {
             <div className="order-side">
               <p className="label">WhatsApp</p>
               <p className="draft">“Hola, quiero la {principal?.nombre} {color.name} talla {talla}”</p>
-              <a className="btn-ink primary" href={`https://wa.me/51999999999?text=${encodeURIComponent(`Hola, quiero ${principal?.nombre} ${color.name} talla ${talla}`)}`} target="_blank" rel="noreferrer">Pedir por WhatsApp</a>
+              <a className="btn-ink primary" href={`https://wa.me/${WHATSAPP_TIENDA}?text=${encodeURIComponent(`Hola, quiero ${principal?.nombre} ${color.name} talla ${talla}`)}`} target="_blank" rel="noreferrer">Pedir por WhatsApp</a>
             </div>
           </div>
         </section>
