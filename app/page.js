@@ -10,7 +10,6 @@ const COLORES = [
   { hex: '#3a5a40', name: 'Verde' },
 ];
 const TALLAS = ['S', 'M', 'L', 'XL'];
-const WHATSAPP_TIENDA = '50379588735';
 
 export default function Home() {
   // Si hay Supabase, arrancamos vacío + loading para no mostrar
@@ -99,7 +98,7 @@ export default function Home() {
       </div>
       <header className="nav">
         <div className="nav-inner">
-          <a href="#" className="logo">nuevas camisas <small>taller</small></a>
+          <a href="#" className="logo">wave club <small>store</small></a>
           <nav className="links">
             <a href="#camisa">La camisa</a>
             <a href="#catalogo">Catálogo</a>
@@ -210,9 +209,9 @@ export default function Home() {
               </form>
             </div>
             <div className="order-side">
-              <p className="label">WhatsApp</p>
-              <p className="draft">“Hola, quiero la {principal?.nombre} {color.name} talla {talla}”</p>
-              <a className="btn-ink primary" href={`https://wa.me/${WHATSAPP_TIENDA}?text=${encodeURIComponent(`Hola, quiero ${principal?.nombre} ${color.name} talla ${talla}`)}`} target="_blank" rel="noreferrer">Pedir por WhatsApp</a>
+              <p className="label">Cómo funciona</p>
+              <p className="draft">Eliges tu camisa en el catálogo, anotas talla y nos dejas tu nombre + WhatsApp. Te escribimos para confirmar.</p>
+              <p className="small-note" style={{ marginTop: 8 }}>El mensaje específico de cada camisa está en su página de detalle.</p>
             </div>
           </div>
         </section>
