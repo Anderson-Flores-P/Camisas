@@ -152,6 +152,18 @@ a{ color:inherit; }
 }
 .cat-pill.active{ background:var(--ink); color:var(--paper); }
 .sku{ border:1px solid var(--muted); border-radius:99px; padding:1px 9px; }
+/* CARRUSEL portada — muchas camisas sin alargar sección */
+.carousel-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; }
+.carousel-btns{ display:flex; gap:8px; }
+.carousel-track{
+  display:flex; gap:16px; margin-top:20px;
+  overflow-x:auto; scroll-snap-type:x mandatory;
+  padding:4px 2px 12px; scrollbar-width:thin;
+}
+.carousel-track::-webkit-scrollbar{ height:8px; }
+.carousel-track::-webkit-scrollbar-thumb{ background:var(--ink); border-radius:99px; }
+.carousel-card{ min-width:260px; max-width:280px; flex:0 0 auto; scroll-snap-align:start; }
+.carousel-card:nth-child(2){ transform:rotate(0); }
 .empty-box{
   height:190px; border:1.5px dashed var(--muted); border-radius:4px; background:var(--paper2);
   display:flex; align-items:center; justify-content:center;

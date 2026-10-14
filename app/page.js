@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabase, isSupabaseConfigured } from '../lib/supabase';
 import { mockProductos, mockVariantes, mockCategorias } from '../lib/mock';
 
@@ -23,8 +23,9 @@ export default function Home() {
   const [toast, setToast] = useState('');
   const [nombre, setNombre] = useState('');
   const [wsp, setWsp] = useState('');
-  const [catFiltro, setCatFiltro] = useState('Todas');
+  const [catTodoFiltro, setCatTodoFiltro] = useState('Todas');
   const [cats, setCats] = useState(() => (isSupabaseConfigured ? [] : mockCategorias.map((c) => c.nombre)));
+  const carRef = useRef(null);
 
   useEffect(() => {
     document.querySelectorAll('.reveal').forEach((el) => el.classList.add('visible'));
@@ -64,13 +65,21 @@ export default function Home() {
   const destacados = useMemo(() => productos.filter((p) => p.mostrar_inicio !== false), [productos]);
   const principal = destacados[0] || productos[0];
   const stockActual = principal ? stockMap.get(`${principal.id}|${talla}`) : null;
-  const categorias = useMemo(() => {
-    const enUso = [...new Set(destacados.map((p) => p.categoria || 'General'))];
+  // Explorar: TODAS las camisas activas, sin importar el switch (independiente de destacados)
+  const todasCats = useMemo(() => {
+    const enUso = [...new Set(productos.map((p) => p.categoria || 'General'))];
     if (!cats.length) return enUso;
-    // respeta el orden del admin, solo las que tienen camisas en inicio
-    return cats.filter((c) => enUso.includes(c));
-  }, [destacados, cats]);
-  const visibles = catFiltro === 'Todas' ? destacados : destacados.filter((p) => (p.categoria || 'General') === catFiltro);
+    const orden = cats.filter((c) => enUso.includes(c));
+    // categorías con camisas pero que no están en la tabla (datos viejos) al final
+    return [...orden, ...enUso.filter((c) => !orden.includes(c))];
+  }, [productos, cats]);
+  const todosVisibles = catTodoFiltro === 'Todas' ? productos : productos.filter((p) => (p.categoria || 'General') === catTodoFiltro);
+
+  function moverCar(dir) {
+    const el = carRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * 300, behavior: 'smooth' });
+  }
 
   function showToast(msg) {
     setToast(msg);
@@ -112,7 +121,8 @@ export default function Home() {
           <a href="#" className="logo">wave club <small>store</small></a>
           <nav className="links">
             <a href="#camisa">La camisa</a>
-            <a href="#catalogo">Catálogo</a>
+            <a href="#catalogo">Destacados</a>
+            <a href="#explorar">Explorar</a>
             <a href="#pedido">Cómo pedir</a>
           </nav>
           <div className="nav-actions">
@@ -176,23 +186,20 @@ export default function Home() {
         </div>
 
         <section className="catalog" id="catalogo">
-          <div className="section-head"><p className="kicker">Catálogo</p><h2>Camisas disponibles</h2>
-            <p className="small-note">Selección del taller — se elige desde /admin con “Mostrar en inicio”.</p>
+          <div className="section-head carousel-head">
+            <div><p className="kicker">Destacados</p><h2>En portada</h2>
+            <p className="small-note">Solo lo marcado en /admin con “Mostrar en inicio”. Desliza →</p></div>
+            {!loading && destacados.length > 1 && (
+              <div className="carousel-btns">
+                <button className="btn-ink small" onClick={() => moverCar(-1)} aria-label="Anterior">←</button>
+                <button className="btn-ink small" onClick={() => moverCar(1)} aria-label="Siguiente">→</button>
+              </div>
+            )}
           </div>
-          {!loading && categorias.length > 1 && (
-            <div className="cat-pills">
-              <button className={`cat-pill ${catFiltro === 'Todas' ? 'active' : ''}`} onClick={() => setCatFiltro('Todas')}>Todas ({destacados.length})</button>
-              {categorias.map((c) => (
-                <button key={c} className={`cat-pill ${catFiltro === c ? 'active' : ''}`} onClick={() => setCatFiltro(c)}>
-                  {c} ({destacados.filter((p) => (p.categoria || 'General') === c).length})
-                </button>
-              ))}
-            </div>
-          )}
           {loading ? (
-            <div className="grid">
+            <div className="carousel-track">
               {[0, 1, 2].map((i) => (
-                <article className="card" key={i} aria-hidden="true">
+                <article className="card carousel-card" key={i} aria-hidden="true">
                   <div className="img-skeleton small" />
                   <div className="line-skeleton" />
                   <div className="line-skeleton short" />
@@ -200,11 +207,51 @@ export default function Home() {
               ))}
             </div>
           ) : (
-          <div className="grid">
-            {visibles.length === 0 && <p className="small-note">Nada en esta categoría por ahora — actívalo en /admin.</p>}
-            {visibles.map((p) => (
-              <article className="card real" key={p.id}>
+          <div className="carousel-track" ref={carRef}>
+            {destacados.length === 0 && <p className="small-note">Nada destacado por ahora — márcalo en /admin.</p>}
+            {destacados.map((p) => (
+              <article className="card real carousel-card" key={p.id}>
                 <div className="card-top"><span className="sku">{p.categoria || 'General'}</span></div>
+                <div className="mini-shirt">
+                  {p.fotos?.length > 0 ? (
+                    <a href={`/producto/${p.id}`}>
+                      <img src={p.fotos[0]} alt={p.nombre} className="prod-img" loading="lazy" />
+                    </a>
+                  ) : (
+                  <svg viewBox="0 0 340 340"><path d="M118 52 L72 76 L50 122 L86 136 L96 116 L96 282 L244 282 L244 116 L254 136 L290 122 L268 76 L222 52 L202 66 L192 66 L192 54 L148 54 L148 66 L138 66 Z" fill={p.color_base || color.hex} stroke="#111" strokeWidth="3" /><circle cx="169" cy="166" r="39" fill="#d95d33" /></svg>
+                  )}
+                </div>
+                <h3><a href={`/producto/${p.id}`}>{p.nombre}</a></h3>
+                <div className="card-foot"><strong>$ {p.precio}</strong><span><a className="btn-ink small" href={`/producto/${p.id}`}>Ver</a> <button className="btn-ink primary small" onClick={() => anotar(p)}>Anotar</button></span></div>
+              </article>
+            ))}
+          </div>
+          )}
+        </section>
+
+        <section className="catalog" id="explorar">
+          <div className="section-head"><p className="kicker">Explorar</p><h2>Todas por categoría</h2>
+            <p className="small-note">Aquí salen todas aunque estén ocultas de portada. La categoría siempre aparece.</p>
+          </div>
+          {!loading && todasCats.length > 0 && (
+            <div className="cat-pills">
+              <button className={`cat-pill ${catTodoFiltro === 'Todas' ? 'active' : ''}`} onClick={() => setCatTodoFiltro('Todas')}>Todas ({productos.length})</button>
+              {todasCats.map((c) => (
+                <button key={c} className={`cat-pill ${catTodoFiltro === c ? 'active' : ''}`} onClick={() => setCatTodoFiltro(c)}>
+                  {c} ({productos.filter((p) => (p.categoria || 'General') === c).length})
+                </button>
+              ))}
+            </div>
+          )}
+          {!loading && (
+          <div className="grid">
+            {todosVisibles.length === 0 && <p className="small-note">Nada aquí todavía.</p>}
+            {todosVisibles.map((p) => (
+              <article className="card real" key={p.id}>
+                <div className="card-top">
+                  <span className="sku">{p.categoria || 'General'}</span>
+                  {p.mostrar_inicio === false && <span className="sku">solo catálogo</span>}
+                </div>
                 <div className="mini-shirt">
                   {p.fotos?.length > 0 ? (
                     <a href={`/producto/${p.id}`}>
