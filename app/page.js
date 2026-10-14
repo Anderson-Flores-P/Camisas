@@ -25,11 +25,22 @@ export default function Home() {
   const [wsp, setWsp] = useState('');
   const [catTodoFiltro, setCatTodoFiltro] = useState('Todas');
   const [cats, setCats] = useState(() => (isSupabaseConfigured ? [] : mockCategorias.map((c) => c.nombre)));
+  const [heroId, setHeroId] = useState(null);
   const carRef = useRef(null);
+
+  function pickRandom(list) {
+    const base = list || [];
+    if (!base.length) return null;
+    return base[Math.floor(Math.random() * base.length)].id;
+  }
 
   useEffect(() => {
     document.querySelectorAll('.reveal').forEach((el) => el.classList.add('visible'));
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      // modo maqueta: elige aleatoria al montar (cambia en cada refresh)
+      setHeroId(pickRandom(mockProductos));
+      return;
+    }
     let vivo = true;
     async function load() {
       try {
@@ -40,8 +51,9 @@ export default function Home() {
           sb.from('categorias').select('nombre').order('nombre'),
         ]);
         if (!vivo) return;
-        if (prods?.length) setProductos(prods);
-        else setProductos(mockProductos);
+        const lista = prods?.length ? prods : mockProductos;
+        setProductos(lista);
+        setHeroId(pickRandom(lista));
         if (vars?.length) setVariantes(vars);
         else setVariantes(mockVariantes);
         if (catData?.length) setCats(catData.map((c) => c.nombre));
@@ -49,6 +61,7 @@ export default function Home() {
         if (!vivo) return;
         setProductos(mockProductos);
         setVariantes(mockVariantes);
+        setHeroId(pickRandom(mockProductos));
       } finally {
         if (vivo) setLoading(false);
       }
@@ -63,7 +76,7 @@ export default function Home() {
     return m;
   }, [variantes]);
   const destacados = useMemo(() => productos.filter((p) => p.mostrar_inicio !== false), [productos]);
-  const principal = destacados[0] || productos[0];
+  const principal = productos.find((p) => p.id === heroId) || productos[0];
   const stockActual = principal ? stockMap.get(`${principal.id}|${talla}`) : null;
   // Explorar: TODAS las camisas activas, sin importar el switch (independiente de destacados)
   const todasCats = useMemo(() => {
@@ -134,8 +147,15 @@ export default function Home() {
       <main>
         <section className="hero" id="camisa">
           <div className="hero-text reveal visible">
-            <p className="kicker">Muestra Nº 01 — serigrafía en taller</p>
+            <p className="kicker">Selección taller — serigrafía en taller</p>
             <h1>Una camisa normal, con un estampado que sí te pondrías.</h1>
+            {!loading && principal && (
+              <div className="hero-pick">
+                <span className="hero-pick-tag">Hoy · {principal.categoria || 'General'}</span>
+                <strong className="hero-pick-name">{principal.nombre}</strong>
+                <span className="hero-pick-meta">$ {principal.precio} · <a href={`/producto/${principal.id}`}>ver ficha →</a></span>
+              </div>
+            )}
             <div className="field">
               <p className="label">Color de tela</p>
               <div className="colors">
@@ -169,13 +189,12 @@ export default function Home() {
               ) : (
               <svg viewBox="0 0 340 340" className="shirt" role="img" aria-label="Camisa">
                 <ellipse cx="170" cy="308" rx="95" ry="12" fill="#000" opacity="0.12" />
-                <path d="M118 52 L72 76 L50 122 L86 136 L96 116 L96 282 L244 282 L244 116 L254 136 L290 122 L268 76 L222 52 L202 66 L192 66 L192 54 L148 54 L148 66 L138 66 Z" fill={color.hex} stroke="#111" strokeWidth="3" />
+                <path d="M118 52 L72 76 L50 122 L86 136 L96 116 L96 282 L244 282 L244 116 L254 136 L290 122 L268 76 L222 52 L202 66 L192 66 L192 54 L148 54 L148 66 L138 66 Z" fill={principal?.color_base || color.hex} stroke="#111" strokeWidth="3" />
                 <circle cx="169" cy="166" r="39" fill="#d95d33" />
                 <path d="M139 166 Q154 148 169 166 Q184 184 199 166" stroke="#232323" strokeWidth="5.5" fill="none" strokeLinecap="round" />
-                <text x="170" y="248" textAnchor="middle" fontFamily="Georgia, serif" fontSize="17" fontWeight="bold" letterSpacing="3" fill="#e8e0cf">WAVE CLUB</text>
+                <text x="170" y="248" textAnchor="middle" fontFamily="Georgia, serif" fontSize="15" fontWeight="bold" letterSpacing="2" fill="#e8e0cf">{(principal?.categoria || 'WAVE CLUB').toUpperCase().slice(0, 14)}</text>
               </svg>
               )}
-              <span className="stamp">muestra</span>
               <figcaption>{principal?.nombre ?? 'Wave Club'} — frente, sin modelo.</figcaption>
             </figure>
           </div>
