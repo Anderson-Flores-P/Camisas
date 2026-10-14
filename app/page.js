@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabase, isSupabaseConfigured } from '../lib/supabase';
-import { mockProductos, mockVariantes } from '../lib/mock';
+import { mockProductos, mockVariantes, mockCategorias } from '../lib/mock';
 
 const COLORES = [
   { hex: '#232323', name: 'Negro taller' },
@@ -23,6 +23,8 @@ export default function Home() {
   const [toast, setToast] = useState('');
   const [nombre, setNombre] = useState('');
   const [wsp, setWsp] = useState('');
+  const [catFiltro, setCatFiltro] = useState('Todas');
+  const [cats, setCats] = useState(() => (isSupabaseConfigured ? [] : mockCategorias.map((c) => c.nombre)));
 
   useEffect(() => {
     document.querySelectorAll('.reveal').forEach((el) => el.classList.add('visible'));
@@ -31,15 +33,17 @@ export default function Home() {
     async function load() {
       try {
         const sb = getSupabase();
-        const [{ data: prods }, { data: vars }] = await Promise.all([
+        const [{ data: prods }, { data: vars }, { data: catData }] = await Promise.all([
           sb.from('productos').select('*').eq('activo', true).order('created_at'),
           sb.from('variantes').select('*'),
+          sb.from('categorias').select('nombre').order('nombre'),
         ]);
         if (!vivo) return;
         if (prods?.length) setProductos(prods);
         else setProductos(mockProductos);
         if (vars?.length) setVariantes(vars);
         else setVariantes(mockVariantes);
+        if (catData?.length) setCats(catData.map((c) => c.nombre));
       } catch {
         if (!vivo) return;
         setProductos(mockProductos);
@@ -57,6 +61,16 @@ export default function Home() {
     for (const v of variantes) m.set(`${v.producto_id}|${v.talla}`, v.stock);
     return m;
   }, [variantes]);
+  const destacados = useMemo(() => productos.filter((p) => p.mostrar_inicio !== false), [productos]);
+  const principal = destacados[0] || productos[0];
+  const stockActual = principal ? stockMap.get(`${principal.id}|${talla}`) : null;
+  const categorias = useMemo(() => {
+    const enUso = [...new Set(destacados.map((p) => p.categoria || 'General'))];
+    if (!cats.length) return enUso;
+    // respeta el orden del admin, solo las que tienen camisas en inicio
+    return cats.filter((c) => enUso.includes(c));
+  }, [destacados, cats]);
+  const visibles = catFiltro === 'Todas' ? destacados : destacados.filter((p) => (p.categoria || 'General') === catFiltro);
 
   function showToast(msg) {
     setToast(msg);
@@ -70,7 +84,7 @@ export default function Home() {
 
   async function enviarPedido(e) {
     e.preventDefault();
-    const prod = productos[0];
+    const prod = principal;
     if (!prod) return;
     const payload = {
       nombre_cliente: nombre || 'sin nombre',
@@ -87,9 +101,6 @@ export default function Home() {
       showToast('Pedido anotado');
     }
   }
-
-  const principal = productos[0];
-  const stockActual = principal ? stockMap.get(`${principal.id}|${talla}`) : null;
 
   return (
     <>
@@ -165,7 +176,19 @@ export default function Home() {
         </div>
 
         <section className="catalog" id="catalogo">
-          <div className="section-head"><p className="kicker">Catálogo</p><h2>Camisas disponibles</h2></div>
+          <div className="section-head"><p className="kicker">Catálogo</p><h2>Camisas disponibles</h2>
+            <p className="small-note">Selección del taller — se elige desde /admin con “Mostrar en inicio”.</p>
+          </div>
+          {!loading && categorias.length > 1 && (
+            <div className="cat-pills">
+              <button className={`cat-pill ${catFiltro === 'Todas' ? 'active' : ''}`} onClick={() => setCatFiltro('Todas')}>Todas ({destacados.length})</button>
+              {categorias.map((c) => (
+                <button key={c} className={`cat-pill ${catFiltro === c ? 'active' : ''}`} onClick={() => setCatFiltro(c)}>
+                  {c} ({destacados.filter((p) => (p.categoria || 'General') === c).length})
+                </button>
+              ))}
+            </div>
+          )}
           {loading ? (
             <div className="grid">
               {[0, 1, 2].map((i) => (
@@ -178,8 +201,10 @@ export default function Home() {
             </div>
           ) : (
           <div className="grid">
-            {productos.map((p) => (
+            {visibles.length === 0 && <p className="small-note">Nada en esta categoría por ahora — actívalo en /admin.</p>}
+            {visibles.map((p) => (
               <article className="card real" key={p.id}>
+                <div className="card-top"><span className="sku">{p.categoria || 'General'}</span></div>
                 <div className="mini-shirt">
                   {p.fotos?.length > 0 ? (
                     <a href={`/producto/${p.id}`}>

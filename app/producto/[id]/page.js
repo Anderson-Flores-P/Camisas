@@ -85,7 +85,7 @@ export default function ProductoDetalle() {
         </div>
 
         <div className="detail-info">
-          <p className="kicker">Serigrafía en taller</p>
+          <p className="kicker">Serigrafía en taller · {prod.categoria || 'General'}</p>
           <h1>{prod.nombre}</h1>
           <p className="detail-price"><strong>$ {prod.precio}</strong></p>
           {prod.descripcion ? <p className="detail-desc">{prod.descripcion}</p> : null}

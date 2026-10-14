@@ -144,6 +144,14 @@ a{ color:inherit; }
 .specs dd{ text-align:right; }
 .card-foot{ display:flex; justify-content:space-between; align-items:center; }
 .card-foot strong{ font-size:1.2rem; }
+.cat-pills{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+.cat-pill{
+  font-family:'Courier New',monospace; font-size:.8rem; font-weight:bold;
+  background:var(--card); border:2px solid var(--ink); border-radius:99px;
+  padding:6px 14px; cursor:pointer; box-shadow:2px 2px 0 var(--ink); transition:.15s;
+}
+.cat-pill.active{ background:var(--ink); color:var(--paper); }
+.sku{ border:1px solid var(--muted); border-radius:99px; padding:1px 9px; }
 .empty-box{
   height:190px; border:1.5px dashed var(--muted); border-radius:4px; background:var(--paper2);
   display:flex; align-items:center; justify-content:center;

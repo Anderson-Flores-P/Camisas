@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { getSupabase, isSupabaseConfigured } from '../../lib/supabase';
+import { mockCategorias } from '../../lib/mock';
 
 const TALLAS = ['S', 'M', 'L', 'XL'];
 const ESTADOS = ['anotado', 'confirmado', 'impreso', 'entregado', 'cancelado'];
@@ -12,12 +13,15 @@ export default function Admin() {
   const [productos, setProductos] = useState([]);
   const [variantes, setVariantes] = useState([]);
   const [pedidos, setPedidos] = useState([]);
-  const [form, setForm] = useState({ nombre: '', ubicacion: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '' });
+  const [form, setForm] = useState({ nombre: '', ubicacion: '', categoria: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '', mostrar_inicio: true });
   const [fotoFile, setFotoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [msg, setMsg] = useState('');
+  const [filtroCat, setFiltroCat] = useState('Todas');
+  const [categorias, setCategorias] = useState(() => (isSupabaseConfigured ? [] : mockCategorias));
+  const [nuevaCat, setNuevaCat] = useState('');
 
   useEffect(() => {
     fetch('/api/admin/session')
@@ -38,20 +42,67 @@ export default function Admin() {
         setProductos(db.productos || []);
         setVariantes(db.variantes || []);
         setPedidos(db.pedidos || []);
+        setCategorias(db.categorias?.length ? db.categorias : mockCategorias);
+      } else {
+        setCategorias(mockCategorias);
       }
       return;
     }
     const sb = getSupabase();
-    const { data: p } = await sb.from('productos').select('*').order('created_at', { ascending: false });
-    const { data: v } = await sb.from('variantes').select('*');
-    const { data: pe } = await sb.from('pedidos').select('*').order('created_at', { ascending: false }).limit(100);
+    const [{ data: p }, { data: v }, { data: pe }, { data: cats }] = await Promise.all([
+      sb.from('productos').select('*').order('created_at', { ascending: false }),
+      sb.from('variantes').select('*'),
+      sb.from('pedidos').select('*').order('created_at', { ascending: false }).limit(100),
+      sb.from('categorias').select('*').order('nombre'),
+    ]);
     setProductos(p || []);
     setVariantes(v || []);
     setPedidos(pe || []);
+    setCategorias(cats || []);
   }
 
-  function saveMock(np, nv, npe) {
-    localStorage.setItem('mock-db', JSON.stringify({ productos: np, variantes: nv, pedidos: npe }));
+  function saveMock(np, nv, npe, ncats) {
+    const prev = JSON.parse(localStorage.getItem('mock-db') || '{}');
+    localStorage.setItem('mock-db', JSON.stringify({
+      productos: np ?? prev.productos,
+      variantes: nv ?? prev.variantes,
+      pedidos: npe ?? prev.pedidos,
+      categorias: ncats ?? prev.categorias ?? mockCategorias,
+    }));
+  }
+
+  async function crearCategoria(e) {
+    e?.preventDefault?.();
+    const nombre = nuevaCat.trim();
+    if (!nombre) return;
+    if (categorias.some((c) => c.nombre.toLowerCase() === nombre.toLowerCase())) {
+      setMsg(`La categoría "${nombre}" ya existe`);
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      const nc = [...categorias, { id: 'c-' + Date.now(), nombre }];
+      setCategorias(nc); saveMock(undefined, undefined, undefined, nc);
+      setNuevaCat(''); setMsg(`Categoría "${nombre}" creada (maqueta)`);
+      return;
+    }
+    const sb = getSupabase();
+    const { error } = await sb.from('categorias').insert({ nombre });
+    setMsg(error ? dbErrorMsg(error) : `Categoría "${nombre}" creada`);
+    if (!error) { setNuevaCat(''); load(); }
+  }
+
+  async function borrarCategoria(id, nombre) {
+    const enUso = productos.filter((p) => (p.categoria || 'General') === nombre).length;
+    if (enUso > 0 && !confirm(`"${nombre}" tiene ${enUso} camisa(s). ¿Borrarla igual? Las camisas quedarán como General.`)) return;
+    if (!isSupabaseConfigured) {
+      const nc = categorias.filter((c) => c.id !== id);
+      setCategorias(nc); saveMock(undefined, undefined, undefined, nc);
+      return;
+    }
+    const sb = getSupabase();
+    const { error } = await sb.from('categorias').delete().eq('id', id);
+    setMsg(error ? dbErrorMsg(error) : 'Categoría borrada');
+    if (!error) load();
   }
 
   // Si Supabase no tiene una columna (ej. descripcion), el error técnico
@@ -161,7 +212,7 @@ export default function Admin() {
         setUploading(false);
       }
     }
-    const payload = { nombre: form.nombre, ubicacion: form.ubicacion, precio: Number(form.precio), tela: form.tela, corte: form.corte, color_base: form.color_base, descripcion: form.descripcion, fotos, activo: true };
+    const payload = { nombre: form.nombre, ubicacion: form.ubicacion, categoria: form.categoria || 'General', precio: Number(form.precio), tela: form.tela, corte: form.corte, color_base: form.color_base, descripcion: form.descripcion, fotos, activo: true, mostrar_inicio: form.mostrar_inicio !== false };
     if (!isSupabaseConfigured) {
       const np = [{ ...payload, id: 'mock-' + Date.now() }, ...productos];
       // crear variantes con stock 0
@@ -180,17 +231,17 @@ export default function Admin() {
         load();
       }
     }
-    setForm({ nombre: '', ubicacion: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '' });
+    setForm({ nombre: '', ubicacion: '', categoria: '', precio: '', tela: '', corte: '', color_base: '#232323', descripcion: '', mostrar_inicio: true });
     setFotoFile(null);
   }
 
   function startEdit(p) {
     setEditingId(p.id);
-    setEditForm({ nombre: p.nombre || '', ubicacion: p.ubicacion || p.sku || '', precio: p.precio || '', tela: p.tela || '', corte: p.corte || '', descripcion: p.descripcion || '' });
+    setEditForm({ nombre: p.nombre || '', ubicacion: p.ubicacion || p.sku || '', categoria: p.categoria || 'General', precio: p.precio || '', tela: p.tela || '', corte: p.corte || '', descripcion: p.descripcion || '', mostrar_inicio: p.mostrar_inicio !== false, activo: p.activo !== false });
   }
 
   async function saveEdit(id) {
-    const payload = { nombre: editForm.nombre, ubicacion: editForm.ubicacion, precio: Number(editForm.precio), tela: editForm.tela, corte: editForm.corte, descripcion: editForm.descripcion };
+    const payload = { nombre: editForm.nombre, ubicacion: editForm.ubicacion, categoria: editForm.categoria || 'General', precio: Number(editForm.precio), tela: editForm.tela, corte: editForm.corte, descripcion: editForm.descripcion, mostrar_inicio: editForm.mostrar_inicio !== false, activo: editForm.activo !== false };
     if (!isSupabaseConfigured) {
       const np = productos.map((p) => (p.id === id ? { ...p, ...payload } : p));
       setProductos(np); saveMock(np, variantes, pedidos);
@@ -202,6 +253,20 @@ export default function Admin() {
       load();
     }
     setEditingId(null);
+  }
+
+  async function toggleCampo(id, campo, valorActual) {
+    const nuevo = !valorActual;
+    if (!isSupabaseConfigured) {
+      const np = productos.map((p) => (p.id === id ? { ...p, [campo]: nuevo } : p));
+      setProductos(np); saveMock(np, variantes, pedidos);
+      setMsg(`${campo === 'mostrar_inicio' ? 'Visibilidad en inicio' : 'Estado'} actualizado (maqueta)`);
+      return;
+    }
+    const sb = getSupabase();
+    const { error } = await sb.from('productos').update({ [campo]: nuevo }).eq('id', id);
+    setMsg(error ? dbErrorMsg(error) : 'Actualizado');
+    if (!error) load();
   }
 
   async function borrarProducto(id) {
@@ -302,11 +367,22 @@ export default function Admin() {
           <h3>Nuevo producto</h3>
           <form onSubmit={crearProducto} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <input className="input" placeholder="Nombre (Wave Club — negra)" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required />
+            <label className="label" style={{ margin: 0 }}>Categoría — elige de la lista</label>
+            <select className="select" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} required>
+              <option value="">— elegir categoría —</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.nombre}>{c.nombre}</option>
+              ))}
+            </select>
             <input className="input" placeholder="Ubicación: ej. D:/fotos/wave o estante 2" value={form.ubicacion} onChange={(e) => setForm({ ...form, ubicacion: e.target.value })} />
             <input className="input" placeholder="Precio 59.90" type="number" step="0.01" value={form.precio} onChange={(e) => setForm({ ...form, precio: e.target.value })} required />
             <input className="input" placeholder="Tela" value={form.tela} onChange={(e) => setForm({ ...form, tela: e.target.value })} />
             <input className="input" placeholder="Corte" value={form.corte} onChange={(e) => setForm({ ...form, corte: e.target.value })} />
             <textarea className="input" placeholder="Descripción larga (se ve en el detalle)" rows="3" value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontFamily: 'Courier New, monospace', fontSize: '.82rem' }}>
+              <input type="checkbox" checked={form.mostrar_inicio !== false} onChange={(e) => setForm({ ...form, mostrar_inicio: e.target.checked })} />
+              Mostrar en inicio
+            </label>
             <label className="label">Foto (frente) — JPG/PNG</label>
             <input className="input" type="file" accept="image/*" onChange={(e) => setFotoFile(e.target.files?.[0] || null)} />
             <button className="btn-ink primary" type="submit" disabled={uploading}>{uploading ? 'Subiendo...' : 'Crear'}</button>
@@ -315,19 +391,40 @@ export default function Admin() {
 
         <div className="admin-card">
           <h3>Productos ({productos.length})</h3>
+          <div className="admin-row" style={{ marginBottom: 8 }}>
+            <label className="label" style={{ margin: 0 }}>Filtrar:</label>
+            <select className="select" style={{ width: 'auto' }} value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)}>
+              <option value="Todas">Todas ({productos.length})</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.nombre}>{c.nombre} ({productos.filter((p) => (p.categoria || 'General') === c.nombre).length})</option>
+              ))}
+            </select>
+          </div>
           <div className="prod-list">
             {productos.length === 0 && <p className="small-note">Sin productos todavía. Crea el primero a la izquierda.</p>}
-            {productos.map((p) => (
+            {productos.filter((p) => filtroCat === 'Todas' || (p.categoria || 'General') === filtroCat).map((p) => (
               editingId === p.id ? (
                 <div className="prod-edit" key={p.id}>
                   <p className="label">Editando — {p.nombre}</p>
                   <div className="edit-grid">
                     <label>Nombre<input className="input" value={editForm.nombre} onChange={(e) => setEditForm({ ...editForm, nombre: e.target.value })} /></label>
                     <label>Precio<input className="input" type="number" step="0.01" value={editForm.precio} onChange={(e) => setEditForm({ ...editForm, precio: e.target.value })} /></label>
+                    <label>Categoría<select className="select" value={editForm.categoria || ''} onChange={(e) => setEditForm({ ...editForm, categoria: e.target.value })}>
+                      <option value="">— elegir —</option>
+                      {categorias.map((c) => (
+                        <option key={c.id} value={c.nombre}>{c.nombre}</option>
+                      ))}
+                    </select></label>
                     <label>Ubicación<input className="input" value={editForm.ubicacion} onChange={(e) => setEditForm({ ...editForm, ubicacion: e.target.value })} placeholder="D:/fotos/... o estante 2" /></label>
                     <label>Tela<input className="input" value={editForm.tela} onChange={(e) => setEditForm({ ...editForm, tela: e.target.value })} /></label>
                     <label>Corte<input className="input" value={editForm.corte} onChange={(e) => setEditForm({ ...editForm, corte: e.target.value })} /></label>
                     <label className="span-2">Descripción<textarea className="input" rows="2" value={editForm.descripcion} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} /></label>
+                    <label className="span-2" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <input type="checkbox" checked={editForm.mostrar_inicio !== false} onChange={(e) => setEditForm({ ...editForm, mostrar_inicio: e.target.checked })} /> Mostrar en inicio
+                    </label>
+                    <label className="span-2" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <input type="checkbox" checked={editForm.activo !== false} onChange={(e) => setEditForm({ ...editForm, activo: e.target.checked })} /> Activo (visible en tienda)
+                    </label>
                   </div>
                   <p className="label">Fotos ({(p.fotos || []).length})</p>
                   <div className="photo-row">
@@ -354,8 +451,16 @@ export default function Admin() {
                   <div className="prod-meta">
                     <strong>{p.nombre}</strong>
                     <span className="prod-sub">$ {p.precio}{(p.ubicacion || p.sku) ? ` · ${p.ubicacion || p.sku}` : ''}</span>
+                    <span className="prod-sub">
+                      <span className="badge">{p.categoria || 'General'}</span>{' '}
+                      <span className={`badge ${p.mostrar_inicio === false ? 'off' : ''}`}>{p.mostrar_inicio === false ? 'oculto inicio' : 'en inicio'}</span>{' '}
+                      {p.activo === false && <span className="badge off">inactivo</span>}
+                    </span>
                   </div>
                   <div className="admin-row">
+                    <button className="btn-ink small" onClick={() => toggleCampo(p.id, 'mostrar_inicio', p.mostrar_inicio !== false)} title="Mostrar / ocultar en pantalla principal">
+                      {p.mostrar_inicio === false ? 'a inicio' : 'quitar'}
+                    </button>
                     <button className="btn-ink small" onClick={() => startEdit(p)}>editar</button>
                     <button className="btn-ink small" onClick={() => borrarProducto(p.id)}>borrar</button>
                   </div>
@@ -363,6 +468,28 @@ export default function Admin() {
               )
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="admin-card" style={{ marginTop: 16 }}>
+        <h3>Categorías ({categorias.length})</h3>
+        <p className="small-note">Créalas aquí una vez. Luego solo eliges de la lista al crear camisas — sin escribir a mano.</p>
+        <form onSubmit={crearCategoria} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <input className="input" placeholder="Nueva categoría: ej. One Piece" value={nuevaCat} onChange={(e) => setNuevaCat(e.target.value)} />
+          <button className="btn-ink primary small" type="submit" disabled={!nuevaCat.trim()}>Agregar</button>
+        </form>
+        <div className="stock-list">
+          {categorias.map((c) => {
+            const n = productos.filter((p) => (p.categoria || 'General') === c.nombre).length;
+            return (
+              <div className="stock-row" key={c.id}>
+                <span className="stock-name">{c.nombre}</span>
+                <span className="badge">{n} camisa(s)</span>
+                <button className="btn-ink small" onClick={() => borrarCategoria(c.id, c.nombre)}>borrar</button>
+              </div>
+            );
+          })}
+          {categorias.length === 0 && <p className="small-note">Sin categorías — crea la primera arriba. Si usas Supabase, corre supabase/categorias_tabla.sql.</p>}
         </div>
       </div>
 
