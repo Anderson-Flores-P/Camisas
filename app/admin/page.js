@@ -146,11 +146,40 @@ export default function Admin() {
     setKey('');
   }
 
+  // Compras con celular pesan 3-5MB y el detalle las descarga enteras.
+  // Se redimensiona a max 1200px JPEG 0.82 (~150-300KB, 10x más rápido).
+  function comprimirImagen(file) {
+    return new Promise((resolve) => {
+      if (!file?.type?.startsWith('image/')) return resolve(file);
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1200;
+        let { width: w, height: h } = img;
+        if (w <= MAX && h <= MAX && file.size < 400 * 1024) return resolve(file);
+        const ratio = Math.min(MAX / w, MAX / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', 0.82);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
   async function subirArchivo(file) {
     const sb = getSupabase();
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await sb.storage.from('fotos').upload(path, file, { upsert: false });
+    const comp = await comprimirImagen(file);
+    const final = comp instanceof Blob && !(comp instanceof File)
+      ? new File([comp], (file.name.split('.').shift() || 'foto') + '.jpg', { type: 'image/jpeg' })
+      : comp;
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+    const { error } = await sb.storage.from('fotos').upload(path, final, { upsert: false, contentType: 'image/jpeg' });
     if (error) throw new Error(error.message);
     const { data } = sb.storage.from('fotos').getPublicUrl(path);
     return data.publicUrl;

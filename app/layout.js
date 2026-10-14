@@ -9,8 +9,14 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
+  const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+    ? (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin; } catch { return null; } })()
+    : null;
   return (
     <html lang="es">
+      <head>
+        {supabaseHost && <link rel="preconnect" href={supabaseHost} crossOrigin="" />}
+      </head>
       <body>
         <div className="grain" aria-hidden="true" />
         {children}
