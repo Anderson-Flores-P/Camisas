@@ -101,3 +101,18 @@ test('optimizador de imágenes: host supabase ajeno', async () => {
   if (process.env.EXPECT_STRICT_HOST) assert.equal(r.status, 400);
   else assert.notEqual(r.status, 400);
 });
+
+test('cabeceras de seguridad en tienda, detalle, /admin y API', { skip: !process.env.EXPECT_HEADERS }, async () => {
+  const html = await (await fetch(BASE + '/')).text();
+  const id = html.match(/href="\/producto\/([^"]+)"/)[1];
+  for (const p of ['/', '/admin', '/producto/' + id, '/api/admin/session']) {
+    const r = await fetch(BASE + p);
+    assert.equal(r.status, 200, p);
+    assert.equal(r.headers.get('x-frame-options'), 'DENY', p);
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff', p);
+    assert.equal(r.headers.get('referrer-policy'), 'strict-origin-when-cross-origin', p);
+    assert.equal(r.headers.get('content-security-policy'), "frame-ancestors 'none'", p);
+  }
+  const admin = await (await fetch(BASE + '/admin')).text();
+  assert.match(admin, /<html/);
+});
