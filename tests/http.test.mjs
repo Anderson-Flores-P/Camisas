@@ -46,9 +46,10 @@ test('login: clave incorrecta 401, correcta 200 + cookie httpOnly', async () => 
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { ok: true });
   const sc = r.headers.get('set-cookie') || '';
-  assert.match(sc, /taller_admin=[0-9a-f]{64}/);
+  assert.match(sc, /taller_admin=\d+\.[0-9a-f]{64}/);
+  assert.match(sc, /Max-Age=604800/i);
   assert.match(sc, /HttpOnly/i);
-  assert.match(sc, /SameSite=lax/i);
+  assert.match(sc, /SameSite=strict/i);
   const cookie = sc.split(';')[0];
   let s = await (await fetch(BASE + '/api/admin/session', { headers: { cookie } })).json();
   assert.equal(s.ok, true);

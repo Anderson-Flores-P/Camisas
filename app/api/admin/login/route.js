@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { ADMIN_COOKIE, isValidKey, signAdminSession } from '../../../../lib/adminAuth';
+import { ADMIN_COOKIE, ADMIN_SESSION_MAX_AGE, isValidKey, signAdminSession } from '../../../../lib/adminAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +24,9 @@ export async function POST(req) {
   fallos.delete(ip);
   cookies().set(ADMIN_COOKIE, signAdminSession(), {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: ADMIN_SESSION_MAX_AGE,
     secure: process.env.NODE_ENV === 'production',
   });
   return Response.json({ ok: true });
