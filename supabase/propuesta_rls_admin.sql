@@ -17,6 +17,9 @@ drop policy if exists "pub_write" on categorias;
 drop policy if exists "pub_read" on pedidos;
 drop policy if exists "pedido_update" on pedidos;
 
+-- storage: lectura pública de fotos; subir solo con privilegios
+drop policy if exists "anon upload fotos" on storage.objects;
+
 -- Opción B (Supabase Auth). Cambia admin@ejemplo.com por el email del admin:
 -- create policy "admin_all" on productos   for all to authenticated using ((auth.jwt() ->> 'email') = 'admin@ejemplo.com') with check ((auth.jwt() ->> 'email') = 'admin@ejemplo.com');
 -- create policy "admin_all" on variantes   for all to authenticated using ((auth.jwt() ->> 'email') = 'admin@ejemplo.com') with check ((auth.jwt() ->> 'email') = 'admin@ejemplo.com');
