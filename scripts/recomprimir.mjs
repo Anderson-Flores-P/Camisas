@@ -12,6 +12,8 @@ const env = Object.fromEntries(
 const { createClient } = await import('@supabase/supabase-js');
 const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
 
+const ORIGEN_SB = new URL(env.NEXT_PUBLIC_SUPABASE_URL).origin;
+
 const { data: prods } = await sb.from('productos').select('id,nombre,fotos').eq('activo', true);
 console.log('productos:', prods?.length);
 for (const p of prods || []) {
@@ -19,6 +21,9 @@ for (const p of prods || []) {
   let cambio = false;
   for (const url of p.fotos || []) {
     try {
+      // solo fotos del bucket propio: no pedir URLs arbitrarias guardadas en la BD
+      const u = new URL(url);
+      if (u.origin !== ORIGEN_SB || !u.pathname.startsWith('/storage/v1/object/public/fotos/')) { nuevas.push(url); continue; }
       const head = await fetch(url, { method: 'HEAD' });
       const size = Number(head.headers.get('content-length') || 0);
       const tipo = head.headers.get('content-type') || '';
