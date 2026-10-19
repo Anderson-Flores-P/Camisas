@@ -1,4 +1,5 @@
 -- Bucket de fotos + permisos (pegar en Supabase > SQL Editor > Run)
+-- Después de este archivo corre seguridad_rls.sql (quita update/delete anónimos de fotos)
 insert into storage.buckets (id, name, public)
 values ('fotos', 'fotos', true)
 on conflict (id) do update set public = true;
