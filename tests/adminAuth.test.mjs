@@ -3,8 +3,8 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import * as auth from '../lib/adminAuth.js';
 
-// Caracterización actual del hallazgo 5 (falla abierto en producción sin clave).
-const PROD_NO_KEY_EXPECTED = true;
+// Hallazgo 5: antes fallaba abierto (true); ahora en producción sin clave se niega.
+const PROD_NO_KEY_EXPECTED = false;
 const ORIG = { ...process.env };
 beforeEach(() => {
   delete process.env.ADMIN_KEY;
@@ -54,7 +54,6 @@ test('sin clave en desarrollo: acceso directo (comportamiento local documentado)
 
 test('sin clave en producción', () => {
   process.env.NODE_ENV = 'production';
-  // CARACTERIZACIÓN ACTUAL (hallazgo 5): falla abierto
   assert.equal(auth.isValidKey('lo-que-sea'), PROD_NO_KEY_EXPECTED);
   assert.equal(auth.isValidSession(undefined), PROD_NO_KEY_EXPECTED);
 });
