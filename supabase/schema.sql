@@ -38,6 +38,7 @@ create table if not exists pedidos (
 
 -- Lectura pública para la tienda, escritura abierta en MVP
 -- (luego lo cerramos con auth; por ahora para que funcione sin login)
+-- Después de este archivo corre seguridad_rls.sql (ver también propuesta_rls_admin.sql)
 alter table productos enable row level security;
 alter table variantes enable row level security;
 alter table pedidos enable row level security;
